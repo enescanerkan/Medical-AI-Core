@@ -13,14 +13,14 @@ class ProjectConfig:
 
     # Dataset Paths
     base_dir: str = os.path.dirname(os.path.abspath(__file__))
-    dataset_path: str = os.path.join(base_dir, 'dataset')
+    dataset_path: str = os.path.join(base_dir, 'dataset') # Join
 
     # Image Processing Parameters ( e.g., for Mammography or CT)
-    target_image_size: tuple = (224,224)
+    target_image_size: tuple = (224,224) # Type Hinting
     clahe_clip_limit: float= 2.0
 
     # Deep Learning Hyperparameters
+    # TODO: Add optimizer configuration support (e.g., Adam, SGD)
     batch_size: int = 16
     learning_rate: float = 0.001
     epochs: int = 50
-
