@@ -1,0 +1,8 @@
+opencv-python~=4.8.0.76
+numpy~=2.4.1
+pydicom~=3.0.1
+mpmath~=1.3.0
+torch~=2.6.0+cu124
+torchvision~=0.21.0+cu124
+matplotlib~=3.10.0
+PyWavelets~=1.9.0
