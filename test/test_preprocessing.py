@@ -50,30 +50,39 @@ def main():
     contour_img = cv2.cvtColor(clahe_img, cv2.COLOR_GRAY2RGB)
     cv2.drawContours(contour_img, contours, -1, (255, 0, 0), 2)
 
-    # Step 4: Qualitative Visualization
+    # Step4: Calculate Histogram
+    raw_hist = AdvancedImageProcessor.calculate_histogram(raw_img)
+    clahe_hist = AdvancedImageProcessor.calculate_histogram(clahe_img)
+
+    # Step 5: Qualitative Visualization
     # Display the transformation stages side-by-side for visual inspection.
-    fig, axes = plt.subplots(1, 4, figsize=(20, 5))
-    fig.suptitle(f"Preprocessing Pipeline Evaluation - {test_file}", fontsize=16)
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig.suptitle(f"Image Enhancement Analysis - {test_file}", fontsize=16)
 
-    axes[0].imshow(raw_img, cmap='gray')
-    axes[0].set_title("1. Original Image")
-    axes[0].axis('off')
+    axes[0, 0].imshow(raw_img, cmap='gray')
+    axes[0, 0].set_title("Original Mammogram")
+    axes[0, 0].axis('off')
 
-    axes[1].imshow(clahe_img, cmap='gray')
-    axes[1].set_title("2. CLAHE Enhanced")
-    axes[1].axis('off')
-
-    axes[2].imshow(binary_img, cmap='gray')
-    axes[2].set_title("3. Binary Thresholding")
-    axes[2].axis('off')
+    axes[0, 1].plot(raw_hist, color='black')
+    axes[0, 1].fill_between(range(256), raw_hist, color='gray', alpha=0.5)
+    axes[0, 1].set_title("Original Pixel Distribution")
+    axes[0, 1].set_xlim([0, 256])
+    axes[0, 1].grid(True, alpha=0.3)
 
     # Note: cmap='gray' is intentionally omitted here because contour_img is an RGB matrix.
-    axes[3].imshow(contour_img)
-    axes[3].set_title(f"4. Detected Contours (n={len(contours)})")
-    axes[3].axis('off')
+    axes[1, 0].imshow(clahe_img, cmap='gray')
+    axes[1, 0].set_title(f"CLAHE Enhanced (Clip Limit: 3.0)")
+    axes[1, 0].axis('off')
+
+    axes[1, 1].plot(clahe_hist, color='blue')
+    axes[1, 1].fill_between(range(256), clahe_hist, color='blue', alpha=0.3)
+    axes[1, 1].set_title("CLAHE Pixel Distribution")
+    axes[1, 1].set_xlim([0, 256])
+    axes[1, 1].grid(True, alpha=0.3)
 
     plt.tight_layout()
     plt.show()
+
 
 if __name__ == "__main__":
     main()
