@@ -1,0 +1,16 @@
+# Data exclusion
+dataset/
+*.dcm
+*.png
+*.npy
+
+# Python environment
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# IDE settings
+.idea/
+.vscode/
