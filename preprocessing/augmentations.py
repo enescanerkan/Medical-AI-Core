@@ -1,41 +1,91 @@
-# augmentations.py
 """
-Defines data augmentation pipelines for medical images.
+Defines data augmentation pipelines and offline generation for medical images.
 """
 
-import torchvision.transforms as T
-
+import os
+import pandas as pd
+from PIL import Image
+from torchvision import transforms  # PEP-8 Fix: Removed the uppercase 'T' alias
 
 class MedicalDataAugmenter:
-    # Data Augmentation combats Overfitting in small medical datasets.
+    """
+    Handles both online preprocessing transforms and offline data augmentation
+    specifically tailored for mammography (MLO and CC views).
+    """
 
     def __init__(self, target_size: tuple = (224, 224)):
         """
-         Initializes the augmentation pipelines.
-
-                Args:
-                    target_size (tuple): Desired image dimensions (H, W).
+        Initializes the standard preprocessing pipelines.
         """
-        self.train_transforms = T.Compose([
-            T.ToPILImage(),
-            T.RandomRotation(degrees=15),
-            T.RandomHorizontalFlip(p=0.5),
-            T.Resize(target_size),
-            T.ToTensor(),
-            # Normalization speeds up Gradient Descent convergence.
-            T.Normalize(mean=[0.5], std=[0.5])
+        self.standard_transforms = transforms.Compose([
+            transforms.Resize(target_size),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
 
-        self.val_transforms = T.Compose([
-            T.ToPILImage(),
-            T.Resize(target_size),
-            T.ToTensor(),
-            # Normalization standardizes pixel values to have a mean of 0.5
-            # and standard deviation of 0.5. This speeds up Gradient Descent convergence.
-            T.Normalize(mean=[0.5], std=[0.5])
-        ])
+    @staticmethod
+    def generate_offline_augmentations(csv_path: str, img_dir: str) -> None:
+        """
+        Reads labels.csv, safely augments ONLY the 'train' split images using
+        horizontal flips and safe rotations (-15 to +15 degrees), saves them to disk,
+        and updates the CSV.
+        """
+        df = pd.read_csv(csv_path)
 
-    def augment_for_training(self, image_array):
-        """Applies the training transformation pipeline to a single image array."""
-        return self.train_transforms(image_array)
+        train_df = df[df['split'] == 'train']
+        new_rows = []
 
+        # Safe medical rotation angles
+        rotation_angles = [-15, -10, -5, 5, 10, 15]
+
+        for index, row in train_df.iterrows():
+            img_name = row['filename']
+            label = row['label']
+            split = row['split']
+
+            img_path = os.path.join(img_dir, img_name)
+
+            if not os.path.exists(img_path):
+                continue
+
+            original_img = Image.open(img_path)
+            base_name = os.path.splitext(img_name)[0]
+
+            # 1. Horizontal Flip (Fixed for modern Pillow versions >= 10.0)
+            hf_img = original_img.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+            hf_name = f"{base_name}_aug_hf.png"
+            hf_img.save(os.path.join(img_dir, hf_name))
+            new_rows.append({"filename": hf_name, "label": label, "split": split})
+
+            # 2. Rotations on original image
+            for angle in rotation_angles:
+                rot_img = original_img.rotate(angle, fillcolor=0)
+                rot_name = f"{base_name}_aug_r{angle}.png"
+                rot_img.save(os.path.join(img_dir, rot_name))
+                new_rows.append({"filename": rot_name, "label": label, "split": split})
+
+            # 3. Rotations on horizontally flipped image
+            for angle in rotation_angles:
+                rot_hf_img = hf_img.rotate(angle, fillcolor=0)
+                rot_hf_name = f"{base_name}_aug_hf_r{angle}.png"
+                rot_hf_img.save(os.path.join(img_dir, rot_hf_name))
+                new_rows.append({"filename": rot_hf_name, "label": label, "split": split})
+
+        if new_rows:
+            augmented_df = pd.DataFrame(new_rows)
+            final_df = pd.concat([df, augmented_df], ignore_index=True)
+            final_df.to_csv(csv_path, index=False)
+            print(f"Success! Generated {len(new_rows)} new augmented images.")
+            print(f"New CSV size: {len(final_df)} rows.")
+        else:
+            print("No 'train' data found to augment.")
+
+if __name__ == "__main__":
+    # Standard paths configuration (PEP-8 Fix: lowercase local variables)
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(base_dir)
+
+    csv_file = os.path.join(project_root, "dataset", "labels.csv")
+    image_dir = os.path.join(project_root, "dataset", "processed")
+
+    MedicalDataAugmenter.generate_offline_augmentations(csv_path=csv_file, img_dir=image_dir)
