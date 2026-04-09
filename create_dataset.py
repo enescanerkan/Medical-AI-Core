@@ -1,9 +1,9 @@
-# create_dataset
 import os
 import cv2
 import pydicom
 import numpy as np
 from preprocessing.smart_cropper import SmartCropper
+from config import ProjectConfig
 
 
 class DatasetCreator:
@@ -53,6 +53,10 @@ class DatasetCreator:
         """
         Executes the dataset creation process for all DICOM files in the input directory.
         """
+        if not os.path.isdir(self.dicom_dir):
+            print(f"Input directory not found: {self.dicom_dir}. Put your raw DICOM files there first.")
+            return
+
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
 
@@ -61,6 +65,10 @@ class DatasetCreator:
             f for f in os.listdir(self.dicom_dir)
             if os.path.isfile(os.path.join(self.dicom_dir, f))
         ]
+
+        if not dicom_files:
+            print(f"No files found in {self.dicom_dir}. Add raw DICOM files and run again.")
+            return
 
         print(f"Starting dataset creation... Processing {len(dicom_files)} files.")
 
@@ -93,8 +101,9 @@ class DatasetCreator:
 
 
 if __name__ == "__main__":
-    INPUT_DICOM_DIR = "dataset/raw_dicom"
-    OUTPUT_PNG_DIR = "dataset/processed"
+    cfg = ProjectConfig()
+    INPUT_DICOM_DIR = cfg.raw_data_path
+    OUTPUT_PNG_DIR = cfg.processed_data_path
 
     creator = DatasetCreator(dicom_dir=INPUT_DICOM_DIR, output_dir=OUTPUT_PNG_DIR)
     creator.create()

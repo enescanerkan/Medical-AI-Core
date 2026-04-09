@@ -1,15 +1,14 @@
 # Raw DICOM Drop Folder
 
-Bu klasör yerel kullanım içindir.
+This folder is for local use.
 
-- Kendi ham `.dcm` / DICOM dosyalarınızı buraya koyun.
-- Bu klasör Git'e eklenmez; sadece sizin bilgisayarınızda kalır.
-- İşleme adımı `create_dataset.py` ile burada bulunan dosyaları okuyup `dataset/processed/` altına PNG olarak yazar.
+- Place your raw `.dcm` / DICOM files here.
+- This folder is not added to Git; it remains only on your local computer.
+- The processing step reads the files located here using `create_dataset.py` and saves them as PNGs under `dataset/processed/`.
 
-## Önerilen akış
+## Recommended workflow
 
-1. Ham DICOM dosyalarını buraya kopyalayın.
-2. `python create_dataset.py` çalıştırın.
-3. Oluşan PNG'leri `dataset/processed/` altında kontrol edin.
-4. Eğitim/evaluasyon için `dataset/labels.csv` hazırlayın.
-
+1. Copy raw DICOM files here.
+2. Run `python create_dataset.py`.
+3. Check the generated PNGs under `dataset/processed/`.
+4. Prepare `dataset/labels.csv` for training/evaluation.

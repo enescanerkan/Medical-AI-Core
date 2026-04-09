@@ -1,8 +1,13 @@
 # Data exclusion
-dataset/
+data/raw/*
+!data/raw/.gitkeep
+!data/raw/README.md
+dataset/raw/
+dataset/processed/
 *.dcm
 *.png
 *.npy
+!dataset/labels.csv
 
 # Python environment
 __pycache__/
