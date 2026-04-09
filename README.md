@@ -78,6 +78,16 @@ Copy your own DICOM files into `data/raw/`.
 
     python create_dataset.py
 
+Preprocessing + automatic labels generation + train-only augmentation:
+
+    python create_dataset.py --generate-labels --augment-train --overwrite-labels
+
+This command does all of the following in order:
+- preprocesses DICOM files into `dataset/processed/`
+- creates `dataset/labels.csv` with deterministic `train/val/test` split
+- infers label from laterality (`L -> 0`, `R -> 1`, fallback to `--default-label`)
+- augments only `train` images and appends matching rows to `labels.csv`
+
 Expected output: `dataset/processed/*.png`
 
 ### 4) Prepare Labels CSV
@@ -91,6 +101,8 @@ Example schema for `dataset/labels.csv`:
     scan_0004.png,0,test
 
 You can also use the `dataset/labels.example.csv` file as a ready-made template.
+
+Note: `labels.example.csv` is static and is not auto-updated. The generated file is `dataset/labels.csv`.
 
 ### 5) Training
 
@@ -114,4 +126,4 @@ Expected output:
 
 - The old `dicom_processor.py` reference has been removed; the official entry point is `create_dataset.py`.
 - `data/raw/` is used instead of the old `dataset/raw_dicom/`.
-- `labels.csv` does not come automatically with the project; you must prepare it according to your dataset.
+- `labels.csv` can now be generated automatically via `create_dataset.py --generate-labels`.

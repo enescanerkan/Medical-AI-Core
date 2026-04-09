@@ -34,12 +34,18 @@ class MedicalDataAugmenter:
 
         train_df = df[df['split'] == 'train']
         new_rows = []
+        existing_filenames = set(df['filename'].astype(str).tolist())
 
         # Safe medical rotation angles
         rotation_angles = [-15, -10, -5, 5, 10, 15]
 
         for index, row in train_df.iterrows():
             img_name = row['filename']
+
+            # Skip already-augmented images so reruns do not explode dataset size.
+            if "_aug_" in str(img_name):
+                continue
+
             label = row['label']
             split = row['split']
 
@@ -54,22 +60,28 @@ class MedicalDataAugmenter:
             # 1. Horizontal Flip (Fixed for modern Pillow versions >= 10.0)
             hf_img = original_img.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
             hf_name = f"{base_name}_aug_hf.png"
-            hf_img.save(os.path.join(img_dir, hf_name))
-            new_rows.append({"filename": hf_name, "label": label, "split": split})
+            if hf_name not in existing_filenames:
+                hf_img.save(os.path.join(img_dir, hf_name))
+                new_rows.append({"filename": hf_name, "label": label, "split": split})
+                existing_filenames.add(hf_name)
 
             # 2. Rotations on original image
             for angle in rotation_angles:
                 rot_img = original_img.rotate(angle, fillcolor=0)
                 rot_name = f"{base_name}_aug_r{angle}.png"
-                rot_img.save(os.path.join(img_dir, rot_name))
-                new_rows.append({"filename": rot_name, "label": label, "split": split})
+                if rot_name not in existing_filenames:
+                    rot_img.save(os.path.join(img_dir, rot_name))
+                    new_rows.append({"filename": rot_name, "label": label, "split": split})
+                    existing_filenames.add(rot_name)
 
             # 3. Rotations on horizontally flipped image
             for angle in rotation_angles:
                 rot_hf_img = hf_img.rotate(angle, fillcolor=0)
                 rot_hf_name = f"{base_name}_aug_hf_r{angle}.png"
-                rot_hf_img.save(os.path.join(img_dir, rot_hf_name))
-                new_rows.append({"filename": rot_hf_name, "label": label, "split": split})
+                if rot_hf_name not in existing_filenames:
+                    rot_hf_img.save(os.path.join(img_dir, rot_hf_name))
+                    new_rows.append({"filename": rot_hf_name, "label": label, "split": split})
+                    existing_filenames.add(rot_hf_name)
 
         if new_rows:
             augmented_df = pd.DataFrame(new_rows)
