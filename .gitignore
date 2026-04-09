@@ -2,6 +2,9 @@
 data/raw/*
 !data/raw/.gitkeep
 !data/raw/README.md
+data/raw_test/*
+!data/raw_test/.gitkeep
+!data/raw_test/README.md
 dataset/raw/
 dataset/processed/
 *.dcm

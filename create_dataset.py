@@ -53,12 +53,12 @@ class DatasetCreator:
 
         return (pixels * 255).astype(np.uint8)
 
-    def create(self) -> list:
+    def _create_from_dir(self, input_dir: str, source_tag: str) -> list:
         """
-        Executes the dataset creation process for all DICOM files in the input directory.
+        Processes one DICOM source directory and returns processed file records.
         """
-        if not os.path.isdir(self.dicom_dir):
-            print(f"Input directory not found: {self.dicom_dir}. Put your raw DICOM files there first.")
+        if not os.path.isdir(input_dir):
+            print(f"Input directory not found: {input_dir}. Skipping source '{source_tag}'.")
             return []
 
         if not os.path.exists(self.output_dir):
@@ -66,15 +66,15 @@ class DatasetCreator:
 
         # DEĞİŞEN KISIM BURASI: Klasördeki her şeyi al (.dcm şartını kaldırdık)
         dicom_files = [
-            f for f in os.listdir(self.dicom_dir)
-            if os.path.isfile(os.path.join(self.dicom_dir, f))
+            f for f in os.listdir(input_dir)
+            if os.path.isfile(os.path.join(input_dir, f))
         ]
 
         if not dicom_files:
-            print(f"No files found in {self.dicom_dir}. Add raw DICOM files and run again.")
+            print(f"No files found in {input_dir}. Skipping source '{source_tag}'.")
             return []
 
-        print(f"Starting dataset creation... Scanning {len(dicom_files)} files.")
+        print(f"Starting dataset creation for '{source_tag}'... Scanning {len(dicom_files)} files.")
 
         processed_count = 0
         skipped_non_dicom_count = 0
@@ -82,15 +82,16 @@ class DatasetCreator:
         processed_records = []
 
         for dcm_name in dicom_files:
-            dcm_path = os.path.join(self.dicom_dir, dcm_name)
+            dcm_path = os.path.join(input_dir, dcm_name)
 
             if not is_dicom(dcm_path):
                 skipped_non_dicom_count += 1
                 print(f"Ignored non-DICOM file: {dcm_name}")
                 continue
 
-            # Uzantısı yoksa bile .png olarak kaydetmek için isimlendirme:
-            png_name = f"{os.path.splitext(dcm_name)[0]}.png"
+            # Use deterministic names per source so reruns overwrite instead of duplicating files.
+            base_png_name = f"{os.path.splitext(dcm_name)[0]}.png"
+            png_name = f"{source_tag}_{base_png_name}"
             out_path = os.path.join(self.output_dir, png_name)
 
             try:
@@ -110,7 +111,7 @@ class DatasetCreator:
                 cv2.imwrite(out_path, processed_image)
                 print(f"Successfully processed: {dcm_name} -> {png_name}")
                 processed_count += 1
-                processed_records.append({"filename": png_name, "laterality": laterality})
+                processed_records.append({"filename": png_name, "laterality": laterality, "source": source_tag})
 
             except Exception as e:
                 failed_count += 1
@@ -123,13 +124,19 @@ class DatasetCreator:
 
         if processed_count == 0:
             print(
-                f"No valid DICOM files were processed from {self.dicom_dir}. "
+                f"No valid DICOM files were processed from {input_dir}. "
                 "Put your raw `.dcm` files in this folder and run again."
             )
         else:
-            print(f"Model-ready images saved to: {self.output_dir}")
+            print(f"Model-ready images for '{source_tag}' saved to: {self.output_dir}")
 
         return processed_records
+
+    def create(self) -> list:
+        """
+        Backward-compatible entrypoint: processes `self.dicom_dir` as train/val source.
+        """
+        return self._create_from_dir(self.dicom_dir, source_tag="trainval")
 
     @staticmethod
     def _laterality_to_label(laterality: str, default_label: int = 0) -> int:
@@ -160,65 +167,54 @@ class DatasetCreator:
         return "L" if center_x < (img_w // 2) else "R"
 
     @staticmethod
-    def _split_counts(total_count: int, train_ratio: float, val_ratio: float, test_ratio: float) -> tuple:
-        ratio_sum = train_ratio + val_ratio + test_ratio
+    def _split_train_val_counts(total_count: int, train_ratio: float, val_ratio: float) -> tuple:
+        ratio_sum = train_ratio + val_ratio
         if ratio_sum <= 0:
-            raise ValueError("train/val/test ratios must sum to a positive value")
+            raise ValueError("train/val ratios must sum to a positive value")
 
         train_ratio = train_ratio / ratio_sum
         val_ratio = val_ratio / ratio_sum
-        test_ratio = test_ratio / ratio_sum
 
         n_train = int(round(total_count * train_ratio))
-        n_val = int(round(total_count * val_ratio))
-        n_test = total_count - n_train - n_val
+        n_val = total_count - n_train
 
-        # Keep counts non-negative and guarantee sum exactly equals total_count.
-        if n_test < 0:
-            n_test = 0
-            n_val = total_count - n_train
-        if n_val < 0:
-            n_val = 0
-            n_train = total_count
-
-        while n_train + n_val + n_test < total_count:
+        while n_train + n_val < total_count:
             n_train += 1
-        while n_train + n_val + n_test > total_count:
+        while n_train + n_val > total_count:
             if n_train > 0:
                 n_train -= 1
-            elif n_val > 0:
-                n_val -= 1
             else:
-                n_test -= 1
+                n_val -= 1
 
-        if total_count >= 3:
-            # Ensure each split has at least one sample when possible.
-            split_counts = {"train": n_train, "val": n_val, "test": n_test}
-            for key in ["train", "val", "test"]:
+        if total_count >= 2:
+            # Ensure both splits have at least one sample when possible.
+            split_counts = {"train": n_train, "val": n_val}
+            for key in ["train", "val"]:
                 if split_counts[key] == 0:
                     donor = max(split_counts, key=split_counts.get)
                     if split_counts[donor] > 1:
                         split_counts[donor] -= 1
                         split_counts[key] += 1
-            n_train, n_val, n_test = split_counts["train"], split_counts["val"], split_counts["test"]
+            n_train, n_val = split_counts["train"], split_counts["val"]
 
-        return n_train, n_val, n_test
+        return n_train, n_val
 
     @staticmethod
     def generate_labels_csv(
         img_dir: str,
         labels_csv_path: str,
+        trainval_records: list,
+        test_records: list,
         overwrite: bool = False,
         train_ratio: float = 0.8,
-        val_ratio: float = 0.1,
-        test_ratio: float = 0.1,
+        val_ratio: float = 0.2,
         seed: int = 42,
         default_label: int = 0,
     ) -> None:
         """
         Generates labels.csv from processed images.
         - label: inferred from laterality (L->0, R->1), fallback to default_label
-        - split: deterministic shuffled train/val/test split
+        - split: train/val from raw trainval source, test from raw_test source
         """
         if not os.path.isdir(img_dir):
             print(f"Labels generation skipped: processed directory not found at {img_dir}")
@@ -231,39 +227,35 @@ class DatasetCreator:
             )
             return
 
-        image_files = sorted(
-            f for f in os.listdir(img_dir)
-            if os.path.isfile(os.path.join(img_dir, f))
-            and f.lower().endswith(".png")
-            and "_aug_" not in f
-        )
+        trainval_files = sorted([row["filename"] for row in trainval_records])
+        test_files = sorted([row["filename"] for row in test_records])
 
-        if not image_files:
-            print(f"Labels generation skipped: no base PNG files found in {img_dir}")
+        if not trainval_files and not test_files:
+            print("Labels generation skipped: no processed base files found from raw/raw_test sources.")
             return
 
         rng = random.Random(seed)
-        shuffled_files = image_files[:]
-        rng.shuffle(shuffled_files)
+        shuffled_trainval = trainval_files[:]
+        rng.shuffle(shuffled_trainval)
 
-        n_train, n_val, n_test = DatasetCreator._split_counts(
-            len(shuffled_files),
+        n_train, n_val = DatasetCreator._split_train_val_counts(
+            len(shuffled_trainval),
             train_ratio=train_ratio,
             val_ratio=val_ratio,
-            test_ratio=test_ratio,
         )
 
         split_lookup = {}
-        for file_name in shuffled_files[:n_train]:
+        for file_name in shuffled_trainval[:n_train]:
             split_lookup[file_name] = "train"
-        for file_name in shuffled_files[n_train:n_train + n_val]:
+        for file_name in shuffled_trainval[n_train:n_train + n_val]:
             split_lookup[file_name] = "val"
-        for file_name in shuffled_files[n_train + n_val:]:
+        for file_name in test_files:
             split_lookup[file_name] = "test"
 
         unknown_count = 0
         rows = []
-        for file_name in image_files:
+        all_base_files = sorted(trainval_files + test_files)
+        for file_name in all_base_files:
             image_path = os.path.join(img_dir, file_name)
             laterality = DatasetCreator._infer_laterality_from_png(image_path)
             if laterality not in {"L", "R"}:
@@ -279,64 +271,20 @@ class DatasetCreator:
 
         print(f"Labels CSV created: {labels_csv_path}")
         print(f"- Total base images: {len(rows)}")
-        print(f"- Split counts      : train={n_train}, val={n_val}, test={n_test}")
+        print(f"- Split counts      : train={n_train}, val={n_val}, test={len(test_files)}")
         print(f"- Unknown laterality: {unknown_count}")
-
-    @staticmethod
-    def generate_placeholder_labels(
-        img_dir: str,
-        labels_csv_path: str,
-        default_label: int = 0,
-        default_split: str = "train",
-        overwrite: bool = False,
-    ) -> None:
-        """
-        Creates a starter labels CSV from processed PNG files.
-        This is a bootstrap helper; user should update labels/splits before real training.
-        """
-        if not os.path.isdir(img_dir):
-            print(f"Labels generation skipped: processed directory not found at {img_dir}")
-            return
-
-        if os.path.exists(labels_csv_path) and not overwrite:
-            print(
-                f"Labels generation skipped: {labels_csv_path} already exists. "
-                "Use --overwrite-labels if you want to recreate it."
-            )
-            return
-
-        image_files = sorted(
-            f for f in os.listdir(img_dir)
-            if os.path.isfile(os.path.join(img_dir, f)) and f.lower().endswith(".png")
-        )
-
-        if not image_files:
-            print(f"Labels generation skipped: no PNG files found in {img_dir}")
-            return
-
-        os.makedirs(os.path.dirname(labels_csv_path), exist_ok=True)
-        with open(labels_csv_path, "w", newline="", encoding="utf-8") as csv_file:
-            writer = csv.writer(csv_file)
-            writer.writerow(["filename", "label", "split"])
-            for file_name in image_files:
-                writer.writerow([file_name, default_label, default_split])
-
-        print(f"Starter labels CSV created: {labels_csv_path}")
-        print(
-            "Important: labels were generated with placeholder values. "
-            "Please update `label` and `split` columns before training."
-        )
 
 
 if __name__ == "__main__":
     cfg = ProjectConfig()
     parser = argparse.ArgumentParser(description="Create processed PNG dataset from raw DICOM files.")
-    parser.add_argument("--input-dir", type=str, default=cfg.raw_data_path, help="Raw DICOM input directory.")
+    parser.add_argument("--trainval-dir", type=str, default=cfg.raw_data_path, help="Raw DICOM directory for train/val source.")
+    parser.add_argument("--test-dir", type=str, default=cfg.raw_test_data_path, help="Raw DICOM directory for test-only source.")
     parser.add_argument("--output-dir", type=str, default=cfg.processed_data_path, help="Processed PNG output directory.")
     parser.add_argument(
         "--generate-labels",
         action="store_true",
-        help="Generate dataset/labels.csv from processed PNG files with train/val/test split.",
+        help="Generate one labels.csv where --trainval-dir becomes train/val and --test-dir becomes test.",
     )
     parser.add_argument("--labels-path", type=str, default=cfg.labels_csv_path, help="Path for generated labels CSV.")
     parser.add_argument("--overwrite-labels", action="store_true", help="Overwrite labels CSV if it already exists.")
@@ -350,14 +298,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--val-ratio",
         type=float,
-        default=0.1,
+        default=0.2,
         help="Validation split ratio for labels generation.",
-    )
-    parser.add_argument(
-        "--test-ratio",
-        type=float,
-        default=0.1,
-        help="Test split ratio for labels generation.",
     )
     parser.add_argument(
         "--seed",
@@ -372,17 +314,19 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    creator = DatasetCreator(dicom_dir=args.input_dir, output_dir=args.output_dir)
-    creator.create()
+    creator = DatasetCreator(dicom_dir=args.trainval_dir, output_dir=args.output_dir)
+    trainval_records = creator._create_from_dir(args.trainval_dir, source_tag="trainval")
+    test_records = creator._create_from_dir(args.test_dir, source_tag="test")
 
     if args.generate_labels:
         DatasetCreator.generate_labels_csv(
             img_dir=args.output_dir,
             labels_csv_path=args.labels_path,
+            trainval_records=trainval_records,
+            test_records=test_records,
             overwrite=args.overwrite_labels,
             train_ratio=args.train_ratio,
             val_ratio=args.val_ratio,
-            test_ratio=args.test_ratio,
             seed=args.seed,
             default_label=args.default_label,
         )

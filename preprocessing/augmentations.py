@@ -24,11 +24,25 @@ class MedicalDataAugmenter:
         ])
 
     @staticmethod
-    def generate_offline_augmentations(csv_path: str, img_dir: str) -> None:
+    def _flip_binary_label(label):
+        """For laterality tasks: horizontal flip swaps L/R labels encoded as 0/1."""
+        try:
+            value = int(label)
+            if value in (0, 1):
+                return 1 - value
+        except Exception:
+            pass
+        return label
+
+    @staticmethod
+    def generate_offline_augmentations(csv_path: str, img_dir: str, flip_swaps_label: bool = True) -> None:
         """
         Reads labels.csv, safely augments ONLY the 'train' split images using
         horizontal flips and safe rotations (-15 to +15 degrees), saves them to disk,
         and updates the CSV.
+
+        If flip_swaps_label=True, horizontally flipped images get label 1-label
+        for binary 0/1 tasks (e.g., left/right laterality).
         """
         df = pd.read_csv(csv_path)
 
@@ -47,6 +61,7 @@ class MedicalDataAugmenter:
                 continue
 
             label = row['label']
+            flipped_label = MedicalDataAugmenter._flip_binary_label(label) if flip_swaps_label else label
             split = row['split']
 
             img_path = os.path.join(img_dir, img_name)
@@ -62,7 +77,7 @@ class MedicalDataAugmenter:
             hf_name = f"{base_name}_aug_hf.png"
             if hf_name not in existing_filenames:
                 hf_img.save(os.path.join(img_dir, hf_name))
-                new_rows.append({"filename": hf_name, "label": label, "split": split})
+                new_rows.append({"filename": hf_name, "label": flipped_label, "split": split})
                 existing_filenames.add(hf_name)
 
             # 2. Rotations on original image
@@ -80,7 +95,7 @@ class MedicalDataAugmenter:
                 rot_hf_name = f"{base_name}_aug_hf_r{angle}.png"
                 if rot_hf_name not in existing_filenames:
                     rot_hf_img.save(os.path.join(img_dir, rot_hf_name))
-                    new_rows.append({"filename": rot_hf_name, "label": label, "split": split})
+                    new_rows.append({"filename": rot_hf_name, "label": flipped_label, "split": split})
                     existing_filenames.add(rot_hf_name)
 
         if new_rows:
