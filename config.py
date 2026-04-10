@@ -24,6 +24,9 @@ class ProjectConfig:
     target_image_size: tuple = (224,224) # Type Hinting
     clahe_clip_limit: float= 2.0
 
+    # Feautre Flags
+    process_test_images: bool = False
+
     # Deep Learning Hyperparameters
     # TODO: Add optimizer configuration support (e.g., Adam, SGD)
     batch_size: int = 16
