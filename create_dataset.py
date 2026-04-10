@@ -316,7 +316,12 @@ if __name__ == "__main__":
 
     creator = DatasetCreator(dicom_dir=args.trainval_dir, output_dir=args.output_dir)
     trainval_records = creator._create_from_dir(args.trainval_dir, source_tag="trainval")
-    test_records = creator._create_from_dir(args.test_dir, source_tag="test")
+    # Feature flag control
+    if not cfg.process_test_images:
+        print("Test image processing is disabled by feature flag.")
+        test_records = []
+    else:
+        test_records = creator._create_from_dir(args.test_dir, source_tag="test")
 
     if args.generate_labels:
         DatasetCreator.generate_labels_csv(
