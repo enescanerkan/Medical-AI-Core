@@ -25,7 +25,7 @@ def main():
     image_files = [f for f in os.listdir(processed_dir) if f.endswith(".png")]
 
     if not image_files:
-        print("Error: No PNG files found in the 'processed' directory. Please run dicom_processor.py first.")
+        print("Error: No PNG files found in the 'processed' directory. Please run create_dataset.py first.")
         return
 
     # Select the first available image for pipeline validation

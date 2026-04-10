@@ -1,7 +1,11 @@
+import os
+import sys
+
 import torch
 import numpy as np
 from tqdm import tqdm
 
+from config import ProjectConfig
 from training.dataset_loader import get_data_loaders
 from training.model import MammographyResNet
 from evaluation.metrics import MedicalMetrics
@@ -21,15 +25,27 @@ def denormalize(tensor: torch.Tensor) -> np.ndarray:
 
 
 def evaluate_model():
-    # PEP-8 Fix: Local variables inside functions must be lowercase.
-    csv_path = "dataset/labels.csv"
-    img_dir = "dataset/processed"
-    model_weights = "result/mammography_resnet.pth"
+    cfg = ProjectConfig()
+    csv_path = cfg.labels_csv_path
+    img_dir = cfg.processed_data_path
+    model_weights = os.path.join(cfg.result_path, "mammography_resnet.pth")
     batch_size = 1
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    if not os.path.exists(csv_path):
+        print(f"Evaluation Error: labels CSV not found at {csv_path}.")
+        sys.exit(1)
+
+    if not os.path.exists(model_weights):
+        print(f"Evaluation Error: model weights not found at {model_weights}.")
+        sys.exit(1)
+
     print("Loading test dataset...")
-    test_loader = get_data_loaders(csv_path=csv_path, img_dir=img_dir, split='test', batch_size=batch_size)
+    try:
+        test_loader = get_data_loaders(csv_path=csv_path, img_dir=img_dir, split='test', batch_size=batch_size)
+    except Exception as exc:
+        print(f"Evaluation Error: {exc}")
+        sys.exit(1)
 
     print("Loading trained model...")
     model = MammographyResNet(num_classes=1)
@@ -56,13 +72,16 @@ def evaluate_model():
             all_preds.append(probabilities)
             all_targets.append(labels)
 
-            # Generate Grad-CAM for the first 3 test images
-            # Generate Grad-CAM for all test images
-            if True:
+            # Generate Grad-CAM only for the first 3 test images to keep evaluation fast.
+            if i < 3:
                 with torch.enable_grad():
                     original_image_np = denormalize(images[0])
                     # Define a save path for each test image
-                    save_path = f"result/gradcam/test_image_{i}_true{int(labels[0].item())}.png"
+                    save_path = os.path.join(
+                        cfg.result_path,
+                        "gradcam",
+                        f"test_image_{i}_true{int(labels[0].item())}.png",
+                    )
 
                     MedicalVisualizer.plot_gradcam(
                         model=model,
@@ -73,6 +92,10 @@ def evaluate_model():
                         true_label=int(labels[0].item()),
                         save_path=save_path  # Pass the save path
                     )
+
+    if not all_preds:
+        print("Evaluation Error: no samples found in test split.")
+        sys.exit(1)
 
     # Compute Final Metrics
     final_preds = torch.cat(all_preds)

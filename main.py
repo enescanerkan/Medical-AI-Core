@@ -1,89 +1,72 @@
 import os
+import sys
+import argparse
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from tqdm import tqdm
 
+from config import ProjectConfig
 from training.dataset_loader import get_data_loaders
 from training.model import MammographyResNet
+from training.trainer import MedicalModelTrainer
 
-class ModelTrainer:
-    """
-    Orchestrates the training loop for the deep learning model.
-    """
-    def __init__(self, model: nn.Module, train_loader, criterion, optimizer, device: torch.device):
-        self.model = model.to(device)
-        self.train_loader = train_loader
-        self.criterion = criterion
-        self.optimizer = optimizer
-        self.device = device
 
-    def train_epoch(self) -> float:
-        self.model.train()
-        running_loss = 0.0
-        loop = tqdm(self.train_loader, leave=True)
+def parse_args() -> argparse.Namespace:
+    cfg = ProjectConfig()
+    default_save_path = os.path.join(cfg.result_path, "mammography_resnet.pth")
 
-        for images, labels in loop:
-            images = images.to(self.device)
-            labels = labels.to(self.device).view(-1, 1)
+    parser = argparse.ArgumentParser(description="Train mammography classifier.")
+    parser.add_argument("--epochs", type=int, default=cfg.epochs, help="Number of training epochs.")
+    parser.add_argument("--batch-size", type=int, default=cfg.batch_size, help="Training batch size.")
+    parser.add_argument("--learning-rate", type=float, default=cfg.learning_rate, help="AdamW learning rate.")
+    parser.add_argument("--csv", type=str, default=cfg.labels_csv_path, help="Path to labels CSV file.")
+    parser.add_argument("--img-dir", type=str, default=cfg.processed_data_path, help="Path to processed image directory.")
+    parser.add_argument("--save-path", type=str, default=default_save_path, help="Path to save trained model weights.")
+    return parser.parse_args()
 
-            outputs = self.model(images)
-            loss = self.criterion(outputs, labels)
-
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
-
-            running_loss += loss.item()
-            loop.set_postfix(loss=loss.item())
-
-        return running_loss / len(self.train_loader)
-
-    def run(self, num_epochs: int, save_path: str) -> None:
-        print(f"Starting training on device: {self.device} for {num_epochs} epochs.")
-
-        for epoch in range(num_epochs):
-            print(f"\nEpoch [{epoch + 1}/{num_epochs}]")
-            avg_loss = self.train_epoch()
-            print(f"Average Training Loss: {avg_loss:.4f}")
-
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        torch.save(self.model.state_dict(), save_path)
-        print(f"\nTraining Complete! Model saved to {save_path}")
 
 if __name__ == "__main__":
-    # Configuration
-    CSV_PATH = "dataset/labels.csv"
-    IMG_DIR = "dataset/processed"
-    BATCH_SIZE = 4
-    LEARNING_RATE = 1e-4
-    NUM_EPOCHS = 10
-    MODEL_SAVE_PATH = "result/mammography_resnet.pth"
+    cfg = ProjectConfig()
+    args = parse_args()
 
-    DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    csv_path = args.csv
+    img_dir = args.img_dir
+    model_save_path = args.save_path
 
-    # FIX: Added split='train' argument to match the new dataset_loader signature
+    if not os.path.exists(csv_path):
+        print(
+            f"Dataset Error: labels CSV not found at {csv_path}. "
+            "First run `create_dataset.py` to prepare `dataset/processed/`, then provide `dataset/labels.csv`."
+        )
+        sys.exit(1)
+
+    if not os.path.isdir(img_dir):
+        print(f"Dataset Error: processed image directory not found at {img_dir}. Run `create_dataset.py` first.")
+        sys.exit(1)
+
     try:
         train_dataloader = get_data_loaders(
-            csv_path=CSV_PATH,
-            img_dir=IMG_DIR,
+            csv_path=csv_path,
+            img_dir=img_dir,
             split='train',
-            batch_size=BATCH_SIZE
+            batch_size=args.batch_size,
         )
     except Exception as e:
         print(f"Dataset Error: {e}")
-        exit(1)
+        sys.exit(1)
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     resnet_model = MammographyResNet(num_classes=1)
     loss_function = nn.BCEWithLogitsLoss()
-    optimizer_function = optim.AdamW(resnet_model.parameters(), lr=LEARNING_RATE)
+    optimizer_function = optim.AdamW(resnet_model.parameters(), lr=args.learning_rate)
 
-    trainer = ModelTrainer(
+    trainer = MedicalModelTrainer(
         model=resnet_model,
-        train_loader=train_dataloader,
+        dataloader=train_dataloader,
         criterion=loss_function,
         optimizer=optimizer_function,
-        device=DEVICE
+        device=device,
     )
 
-    trainer.run(num_epochs=NUM_EPOCHS, save_path=MODEL_SAVE_PATH)
+    trainer.run(num_epochs=args.epochs, save_path=model_save_path)

@@ -6,6 +6,9 @@ from torchvision import transforms
 from PIL import Image
 
 
+REQUIRED_COLUMNS = {"filename", "label", "split"}
+
+
 class MammographyDataset(Dataset):
     """
     Custom PyTorch Dataset for loading mammography images and their corresponding labels.
@@ -17,7 +20,21 @@ class MammographyDataset(Dataset):
     """
 
     def __init__(self, csv_file: str, img_dir: str, split: str, transform=None):
+        if not os.path.exists(csv_file):
+            raise FileNotFoundError(f"labels CSV not found: {csv_file}")
+        if not os.path.isdir(img_dir):
+            raise FileNotFoundError(f"processed image directory not found: {img_dir}")
+
         df = pd.read_csv(csv_file)
+        missing_columns = REQUIRED_COLUMNS.difference(df.columns)
+        if missing_columns:
+            raise ValueError(
+                f"labels CSV must contain columns {sorted(REQUIRED_COLUMNS)}; missing {sorted(missing_columns)}"
+            )
+
+        if split not in set(df["split"].dropna().unique()):
+            raise ValueError(f"split='{split}' not found in {csv_file}")
+
         self.annotations = df[df['split'] == split].reset_index(drop=True)
         self.img_dir = img_dir
         self.transform = transform
@@ -36,14 +53,18 @@ class MammographyDataset(Dataset):
         Returns:
             tuple: (image_tensor, label_tensor)
         """
-        img_name = self.annotations.iloc[index, 0]
+        row = self.annotations.iloc[index]
+        img_name = row["filename"]
         img_path = os.path.join(self.img_dir, img_name)
+
+        if not os.path.exists(img_path):
+            raise FileNotFoundError(f"Processed image not found: {img_path}")
 
         # Open image and convert to RGB (ResNet expects 3 channels)
         image = Image.open(img_path).convert("RGB")
 
         # Extract label and convert to float tensor for binary classification (BCE Loss)
-        y_label = torch.tensor(float(self.annotations.iloc[index, 1]))
+        y_label = torch.tensor(float(row["label"]))
 
         if self.transform:
             image = self.transform(image)
@@ -64,6 +85,9 @@ def get_data_loaders(csv_path: str, img_dir: str, split: str, batch_size: int = 
     Returns:
         DataLoader: Iterable PyTorch DataLoader.
     """
+    if split not in {"train", "val", "test"}:
+        raise ValueError("split must be one of: 'train', 'val', 'test'")
+
     # Standard ImageNet normalization values required by pre-trained ResNet
     transform_pipeline = transforms.Compose([
         transforms.ToTensor(),

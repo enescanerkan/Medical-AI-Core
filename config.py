@@ -13,7 +13,12 @@ class ProjectConfig:
 
     # Dataset Paths
     base_dir: str = os.path.dirname(os.path.abspath(__file__))
-    dataset_path: str = os.path.join(base_dir, 'dataset') # Join
+    raw_data_path: str = os.path.join(base_dir, 'data', 'raw')
+    raw_test_data_path: str = os.path.join(base_dir, 'data', 'raw_test')
+    dataset_path: str = os.path.join(base_dir, 'dataset')
+    processed_data_path: str = os.path.join(dataset_path, 'processed')
+    labels_csv_path: str = os.path.join(dataset_path, 'labels.csv')
+    result_path: str = os.path.join(base_dir, 'result')
 
     # Image Processing Parameters ( e.g., for Mammography or CT)
     target_image_size: tuple = (224,224) # Type Hinting
