@@ -39,7 +39,7 @@ def main():
 
     image_files = [f for f in os.listdir(processed_dir) if f.endswith(".png")]
     if not image_files:
-        print("Error: No images found in the processed directory.")
+        print("Error: No images found in the processed directory. Please run create_dataset.py first.")
         return
 
     test_file = image_files[0]

@@ -1,0 +1,6 @@
+env/
+__pycache__/
+.git/
+data/raw/
+dataset/raw/
+dataset/processed/

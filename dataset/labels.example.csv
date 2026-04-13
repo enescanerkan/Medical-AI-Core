@@ -1,0 +1,6 @@
+filename,label,split
+scan_0001.png,0,train
+scan_0002.png,1,train
+scan_0003.png,1,val
+scan_0004.png,0,test
+

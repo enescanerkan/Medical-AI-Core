@@ -7,7 +7,6 @@ import os
 import pydicom
 import numpy as np
 import cv2
-from mpmath.libmp import normalize
 
 
 class DicomManager:

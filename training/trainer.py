@@ -6,6 +6,7 @@ Description: Encapsulates the main PyTorch training loop engine.
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from tqdm import tqdm
 
 
 class MedicalModelTrainer:
@@ -46,9 +47,10 @@ class MedicalModelTrainer:
         self.model.train()
         running_loss = 0.0
 
-        for images, labels in self.dataloader:
+        progress = tqdm(self.dataloader, leave=True)
+        for images, labels in progress:
             images = images.to(self.device)
-            labels = labels.to(self.device)
+            labels = labels.to(self.device).view(-1, 1)
 
             # Zero gradients to prevent accumulation from previous passes.
             self.optimizer.zero_grad()
@@ -64,5 +66,23 @@ class MedicalModelTrainer:
             self.optimizer.step()
 
             running_loss += loss.item()
+            progress.set_postfix(loss=loss.item())
 
         return running_loss / len(self.dataloader)
+
+    def run(self, num_epochs: int, save_path: str) -> None:
+        """
+        Trains the model for multiple epochs and saves the final weights.
+        """
+        print(f"Starting training on device: {self.device} for {num_epochs} epochs.")
+
+        for epoch in range(num_epochs):
+            print(f"\nEpoch [{epoch + 1}/{num_epochs}]")
+            avg_loss = self.train_one_epoch()
+            print(f"Average Training Loss: {avg_loss:.4f}")
+
+        import os
+
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        torch.save(self.model.state_dict(), save_path)
+        print(f"\nTraining Complete! Model saved to {save_path}")
