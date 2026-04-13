@@ -1,50 +1,101 @@
-# Mammography AI: Core Preprocessing Pipeline
+# Medical-AI-Core
 
-A professional computer vision framework designed to prepare raw mammography scans for deep learning architectures. This repository focuses on the critical first steps of medical image analysis: standardizing files, enhancing anatomical features, and isolating the Region of Interest (ROI).
+This repository currently includes two main workflows for mammography imaging:
 
-## Project Purpose
-The accuracy of medical AI models heavily depends on the quality of input data. This project provides an automated pipeline to:
-- Convert and scale raw 16-bit DICOM images into standardized 8-bit formats.
-- Enhance microcalcifications and hidden lesions using frequency-domain analysis (Wavelet Transforms).
-- Automatically crop and center breast tissue (Laterality-Aware) to remove irrelevant background noise.
+1. DICOM -> preprocessing -> standard classification dataset (`dataset/processed`)
+2. YOLO classification -> a single model that predicts imaging view (`CC` vs `MLO`)
 
-## Repository Structure
-    medical-ai-core/
-    ├── dataset/                 # (Local only) Data storage
-    │   ├── raw_dicom/           # Place your raw .dcm files here
-    │   └── processed/           # Output directory for tensor-ready PNGs
-    ├── preprocessing/           # Core logic (Wavelet Transform, Smart Crop)
-    ├── tests/                   # Validation & Visualization dashboards
-    ├── dicom_processor.py       # Main engine for batch-converting DICOM files
-    ├── config.py                # Centralized configuration (paths, parameters)
-    └── requirements.txt         # Project dependencies
+## Current Data Layout
 
-## How to Use
+- `data/raw/`: raw DICOM inputs
+- `data/raw_test/`: optional separate DICOM test pool
+- `data/yolo-data/CC/images/{train,val,test}`: CC view images
+- `data/yolo-data/MLO/images/{train,val,test}`: MLO view images
+- `dataset/yolo26_cls/`: generated workspace for YOLO classification
 
-### 1. Setup the Environment
-Install the core data science dependencies:
-    pip install numpy opencv-python PyWavelets matplotlib pydicom dicom2jpg
+## YOLO26-m CC/MLO Classification Pipeline
 
-Install PyTorch with CUDA 12.4 support for GPU acceleration:
-    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+This pipeline does not use detection label files (`labels/*.txt`).
+Class labels are inferred from folder names only:
 
-### 2. Prepare the Data
-Place your raw .dcm (DICOM) files into the dataset/raw_dicom/ directory. (Note: This directory is git-ignored to protect sensitive medical data).
+- `CC` -> class `CC`
+- `MLO` -> class `MLO`
 
-### 3. Run the Pipeline
-First, execute the processor to convert raw DICOMs into standard images:
-    python dicom_processor.py
+### 1) Install Dependencies
 
-Then, launch the visual validation dashboard to inspect the edge-boosting and cropping results:
-    python tests/test_advanced_prep.py
+```bash
+pip install -r requirements.txt
+```
 
-## Future Work (To-Do)
--  Model Architecture: Design and implement advanced CNN backbones (e.g., ResNet, EfficientNet, or Swin Transformer) for classification.
--  Training Loop: Build a robust PyTorch training pipeline with CUDA acceleration.
-- Clinical Metrics: Implement medical evaluation metrics (AUC-ROC, Sensitivity, Specificity) to validate model performance.
-'@
+### 2) Prepare Dataset (CSV + Classification Structure)
 
-Set-Content -Path README.md -Value $content -Encoding UTF8
-git add .
-git commit -m "docs: add comprehensive README with structure, usage steps, and future roadmap"
-git push
+```bash
+python scripts/train_yolo26_cls.py --prepare-only
+```
+
+Outputs:
+
+- `dataset/yolo26_cls/labels.csv` (`filename`, `class`, `split`, `source_path`)
+- `dataset/yolo26_cls/prepared/{train,val,test}/{CC,MLO}/*.png`
+
+Note: The default mode is `hardlink`, so files are linked without full duplication when supported by the filesystem. Use `--copy-mode copy` if you need physical copies.
+
+### 3) Start Training
+
+```bash
+python scripts/train_yolo26_cls.py --model yolo26m-cls.pt --epochs 30 --imgsz 640 --batch 32 --device auto
+```
+
+Device behavior:
+
+- `--device auto`: uses CUDA `0` if available, otherwise falls back to CPU.
+- `--device 0`: requests CUDA `0`; if CUDA is unavailable, the script falls back to CPU with a warning.
+- `--device cpu`: forces CPU execution.
+
+Use early stopping with `--patience`:
+
+```bash
+python scripts/train_yolo26_cls.py --model yolo26m-cls.pt --epochs 50 --patience 8 --device auto
+```
+
+After training, a test confusion matrix is generated automatically:
+
+- `dataset/yolo26_cls/runs/<run_name>/confusion_matrix_test.png`
+
+Disable confusion matrix generation if required:
+
+```bash
+python scripts/train_yolo26_cls.py --no-confusion-matrix
+```
+
+### 4) Custom Run Name
+
+```bash
+python scripts/train_yolo26_cls.py --run-name yolo26_cc_mlo_v1
+```
+
+## Data Versioning and Git Policy
+
+Large medical datasets and generated training artifacts are intentionally excluded from Git.
+
+Ignored by default:
+
+- Raw DICOM datasets under `data/raw/` and `data/raw_test/`
+- External YOLO source data under `data/yolo-data/`
+- Generated images and run outputs under `dataset/processed/` and `dataset/yolo26_cls/runs/`
+- Model weight artifacts such as `*.pt`, `*.pth`, `*.onnx`, and `*.engine`
+
+Recommended workflow:
+
+1. Keep only code, configs, and documentation in the repository.
+2. Recreate prepared datasets locally with `--prepare-only`.
+3. Keep trained weights and run artifacts in local or remote artifact storage, not in Git.
+
+## Design Notes (OOP/SOLID)
+
+- `training/yolo26_cls/dataset.py`: data indexing and label policy abstraction
+- `training/yolo26_cls/pipeline.py`: orchestration layer for preparation, training, and evaluation
+- `training/yolo26_cls/config.py`: centralized configuration boundary
+- `scripts/train_yolo26_cls.py`: CLI entry point and runtime wiring
+
+This separation keeps responsibilities clear and supports maintainable, testable evolution of the pipeline.

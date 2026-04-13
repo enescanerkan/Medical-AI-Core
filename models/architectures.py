@@ -23,11 +23,11 @@ class SimpleMedicalCNN(nn.Module):
         """
         super(SimpleMedicalCNN, self).__init__()
 
-        # Feature Extraction Layer / Özellik Çıkarım Katmanı
+        # Feature extraction block
         self.conv1 = nn.Conv2d(in_channels, 16, kernel_size=3, padding=1)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
 
-        # Classification Layer / Sınıflandırma Katmanı (Varsayım: Girdi 224x224)
+        # Classification head (assumes 224x224 input)
         self.fc1 = nn.Linear(16 * 112 * 112, num_classes)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -41,6 +41,6 @@ class SimpleMedicalCNN(nn.Module):
             torch.Tensor: Raw class predictions (logits).
         """
         x = self.pool(F.relu(self.conv1(x)))
-        x = x.view(-1, 16 * 112 * 112)  # Flatten / Düzleştirme
+        x = x.view(-1, 16 * 112 * 112)  # Flatten spatial features
         x = self.fc1(x)
         return x
