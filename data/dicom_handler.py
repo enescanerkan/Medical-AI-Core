@@ -67,12 +67,12 @@ class DicomManager:
             dcm = pydicom.dcmread(dicom_path)
             pixel_array = dcm.pixel_array
 
-            # IMPORTANT CONCEPT: Handle Photometric Interpretation (Inversion)
-            # TODO: Bunu düzelt ; Eğer cihaz 'MONOCHROME1' kaydettiyse, matrisi tersine çeviriyoruz (Negatif alıyoruz).
-            # Böylece tüm resimler standart 'MONOCHROME2' (Siyah arka plan) mantığına döner.
+            # Handle photometric interpretation for consistent display polarity.
+            # MONOCHROME1 stores bright values as low intensity, so we invert it
+            # to match MONOCHROME2 behavior (black background, bright tissue).
             photo_interp = getattr(dcm, 'PhotometricInterpretation', 'MONOCHROME2')
             if photo_interp == 'MONOCHROME1':
-                # Matrisi ters çevir: (Maksimum Değer - Mevcut Değer)
+                # Invert grayscale values: max_value - current_value
                 pixel_array = np.max(pixel_array) - pixel_array
 
             # 16-bit to 8-bit Conversion (Windowing/Normalization)

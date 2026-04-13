@@ -1,22 +1,35 @@
-# Data exclusion
-data/raw/*
-!data/raw/.gitkeep
-!data/raw/README.md
-data/raw_test/*
-!data/raw_test/.gitkeep
-!data/raw_test/README.md
-dataset/raw/
-dataset/processed/
-*.dcm
-*.png
-*.npy
-!dataset/labels.csv
+# Local data and generated artifacts
+# Raw DICOM and external datasets
+/data/raw/**
+!/data/raw/.gitkeep
+/data/raw_test/**
+!/data/raw_test/.gitkeep
+/data/yolo-data/**
 
-# Python environment
+# Generated datasets and training outputs
+/dataset/processed/**
+/dataset/yolo26_cls/prepared/**
+/dataset/yolo26_cls/runs/**
+/dataset/yolo26_cls/*.pt
+/dataset/yolo26_cls/*.pth
+/result/**
+
+# Large model artifacts
+*.pt
+*.pth
+*.onnx
+*.engine
+
+# Python environment and caches
 __pycache__/
 *.py[cod]
 *$py.class
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
 venv/
+.venv/
+env/
 .env
 
 # IDE settings
